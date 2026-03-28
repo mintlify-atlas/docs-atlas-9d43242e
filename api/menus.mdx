@@ -1,0 +1,104 @@
+---
+title: "Menus"
+description: "Retrieve the menu and module hierarchy. Requires a valid Bearer token."
+---
+
+The Menus API returns the full menu structure — each menu with its associated modules. Use this to build navigation in your frontend after a user logs in.
+
+**Base path:** `/api/menus`  
+**Auth required:** Yes — `Authorization: Bearer <token>`
+
+---
+
+## List menus
+
+`GET /api/menus`
+
+Returns all menus, each with their associated modules.
+
+### Response — 200 OK
+
+An array of `MenuResponse` objects.
+
+<ResponseField name="id" type="integer">
+  The menu's ID.
+</ResponseField>
+<ResponseField name="strNombreMenu" type="string">
+  The menu's display name.
+</ResponseField>
+<ResponseField name="modulos" type="array">
+  Modules linked to this menu.
+  <Expandable title="ModuloResponse properties">
+    <ResponseField name="id" type="integer">
+      The module's ID.
+    </ResponseField>
+    <ResponseField name="strNombreModulo" type="string">
+      The module's display name.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example response
+
+```json
+[
+  {
+    "id": 1,
+    "strNombreMenu": "Seguridad",
+    "modulos": [
+      { "id": 1, "strNombreModulo": "Perfil" },
+      { "id": 2, "strNombreModulo": "Módulo" },
+      { "id": 3, "strNombreModulo": "Permisos-Perfil" },
+      { "id": 4, "strNombreModulo": "Usuario" }
+    ]
+  },
+  {
+    "id": 2,
+    "strNombreMenu": "Principal 1",
+    "modulos": [
+      { "id": 5, "strNombreModulo": "Principal 1.1" },
+      { "id": 6, "strNombreModulo": "Principal 1.2" }
+    ]
+  },
+  {
+    "id": 3,
+    "strNombreMenu": "Principal 2",
+    "modulos": [
+      { "id": 7, "strNombreModulo": "Principal 2.1" },
+      { "id": 8, "strNombreModulo": "Principal 2.2" }
+    ]
+  }
+]
+```
+
+### Example request
+
+```bash
+curl --request GET \
+  --url https://your-host/api/menus \
+  --header 'Authorization: Bearer <token>'
+```
+
+<Tip>
+  After login, compare the `idModulo` values in the user's `permisos` array against the module IDs returned here to determine which menu items to show — and with what capabilities.
+</Tip>
+
+---
+
+## Default menu structure
+
+The server seeds three menus on first start:
+
+| Menu | Modules |
+|------|---------|
+| Seguridad | Perfil, Módulo, Permisos-Perfil, Usuario |
+| Principal 1 | Principal 1.1, Principal 1.2 |
+| Principal 2 | Principal 2.1, Principal 2.2 |
+
+---
+
+## Error responses
+
+| Status | Body | Reason |
+|--------|------|--------|
+| `401 Unauthorized` | — | Missing or invalid Bearer token. |

@@ -1,0 +1,113 @@
+---
+title: 'Security Configuration'
+description: 'JWT authentication, reCAPTCHA, password hashing, and CORS configuration for the Seguridad App.'
+---
+
+This page describes the security model of the Seguridad App: what you need to configure, what each mechanism does, and what guarantees it provides.
+
+## JWT authentication
+
+All protected API endpoints use JWT (JSON Web Token) bearer authentication under the scheme name `auth-jwt`.
+
+### Token structure
+
+Tokens are signed with **HMAC256** using the value of the `JWT_SECRET` environment variable. Each token carries the following claims:
+
+```json
+{
+  "sub": "admin",
+  "userId": 1,
+  "perfilId": 1,
+  "esAdministrador": true,
+  "iss": "seguridad-app",
+  "iat": 1711584000,
+  "exp": 1711670400
+}
+```
+
+| Claim | Type | Description |
+|---|---|---|
+| `sub` | string | Username of the authenticated user |
+| `userId` | integer | Database ID of the user (`usuarios.id`) |
+| `perfilId` | integer | Database ID of the user's profile (`perfiles.id`) |
+| `esAdministrador` | boolean | Whether the user's profile has `bit_administrador = true` |
+| `iss` | string | Always `"seguridad-app"` |
+| `iat` | unix timestamp | Time the token was issued |
+| `exp` | unix timestamp | Expiry time — always 24 hours after `iat` |
+
+### Token lifetime
+
+Tokens expire **24 hours** after issuance (86,400,000 ms). There is no refresh token mechanism — clients must re-authenticate after expiry.
+
+### Using the token
+
+Include the token in the `Authorization` header of every request to a protected endpoint:
+
+```http
+Authorization: Bearer <your_jwt_token>
+```
+
+<Note>
+The `Bearer` prefix is required. Requests to protected endpoints without a valid `Authorization` header will receive a `401 Unauthorized` response.
+</Note>
+
+### Token validation
+
+The server validates every incoming token by:
+
+1. Verifying the HMAC256 signature against `JWT_SECRET`
+2. Checking the issuer matches `"seguridad-app"`
+3. Confirming the `userId` claim is present and is an integer
+4. Confirming the token has not expired
+
+If any check fails, the request is rejected with `401 Unauthorized`.
+
+## reCAPTCHA
+
+Every login request must include a valid Google reCAPTCHA v2 token. The token is validated server-side before the credentials are checked.
+
+### How it works
+
+1. Your frontend renders a reCAPTCHA v2 widget and obtains a response token from Google.
+2. The frontend sends the token alongside the login credentials.
+3. The server posts the token to `https://www.google.com/recaptcha/api/siteverify` using the `RECAPTCHA_SECRET` key.
+4. Google responds with a `success: true/false` verdict.
+5. If validation fails, the login is rejected regardless of the credentials.
+
+### Configuration
+
+Set your reCAPTCHA v2 server-side secret key via the environment variable:
+
+```bash
+RECAPTCHA_SECRET=your_recaptcha_secret_key_here
+```
+
+You obtain this key from the [Google reCAPTCHA Admin Console](https://www.google.com/recaptcha/admin). Make sure you register a **v2 ("I'm not a robot" Checkbox)** site key.
+
+<Warning>
+The fallback default key (`6Lcj3ossAAAAAAFK0hIW8FrgfTQfeivriiYQUUEq`) is embedded in the source code and is therefore public. It must not be used in any shared or production environment. An attacker who knows this key can craft requests that bypass CAPTCHA validation.
+</Warning>
+
+## Password security
+
+User passwords are hashed using **bcrypt** with a cost factor of **12** before storage. The bcrypt library used is `at.favre.lib:bcrypt:0.10.2`.
+
+A cost factor of 12 means each hash requires 2¹² = 4,096 iterations of the key schedule, making brute-force attacks expensive. At this cost factor, a modern CPU takes roughly 300–400 ms to compute a single hash.
+
+The `str_pwd` column in the `usuarios` table always contains a bcrypt hash string in the standard `$2a$12$...` format. Passwords are never stored or logged in plain text.
+
+## CORS
+
+CORS is enabled via the Ktor `ktor-server-cors` plugin. This allows browser-based clients running on different origins to make requests to the API. Refer to your deployment's CORS configuration to restrict allowed origins for production use.
+
+## Production security checklist
+
+<Warning>
+Before deploying to any internet-facing environment, verify all of the following:
+
+- **Change the default admin password.** The seed user `admin` has password `Admin123`, which is publicly known from the source code. Update it through the user management API after first login.
+- **Set a strong `JWT_SECRET`.** The default value is in the public source code. Any attacker who knows it can forge valid JWT tokens for any user. Generate a new secret with `openssl rand -hex 32`.
+- **Set a real `RECAPTCHA_SECRET`.** The default key is public. Replace it with a key registered to your own domain in the Google reCAPTCHA Admin Console.
+- **Use HTTPS.** JWT tokens and credentials are transmitted in HTTP headers. Without TLS, they can be intercepted in transit. Terminate TLS at a reverse proxy (e.g., nginx, Caddy) or load balancer in front of the application.
+- **Restrict database access.** The database should not be publicly reachable. Use a private network or VPC, and ensure `DATABASE_PASSWORD` is a strong, unique value.
+</Warning>

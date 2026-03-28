@@ -1,0 +1,166 @@
+---
+title: 'Authentication'
+description: 'How JWT-based authentication and reCAPTCHA verification work in Seguridad App.'
+keywords: ['authentication', 'jwt', 'login', 'recaptcha', 'token', 'bearer']
+---
+
+Seguridad App uses JWT (JSON Web Token) authentication combined with Google reCAPTCHA v2 on login. Every request to a protected endpoint must carry a valid token in the `Authorization` header. Tokens are signed with HMAC-256 and expire after 24 hours.
+
+## Authentication flow
+
+<Steps>
+  <Step title="Obtain a reCAPTCHA token">
+    Your client must integrate [Google reCAPTCHA v2](https://developers.google.com/recaptcha/docs/display) and obtain a `recaptchaToken` from the widget before submitting the login form. The server validates this token directly against `https://www.google.com/recaptcha/api/siteverify` — login is rejected outright if the captcha is invalid.
+  </Step>
+
+  <Step title="POST to /api/auth/login">
+    Send the user's credentials together with the reCAPTCHA token:
+
+    ```bash
+    curl -X POST http://localhost:8080/api/auth/login \
+      -H "Content-Type: application/json" \
+      -d '{
+        "username": "admin",
+        "password": "Admin123",
+        "recaptchaToken": "<token-from-recaptcha-widget>"
+      }'
+    ```
+
+    **Request body — `LoginRequest`**
+
+    | Field | Type | Description |
+    |---|---|---|
+    | `username` | string | The user's login name (`strNombreUsuario`). |
+    | `password` | string | The user's plaintext password (compared against a bcrypt hash). |
+    | `recaptchaToken` | string | The token returned by the reCAPTCHA v2 widget. |
+
+    A successful login returns HTTP 200 with a `LoginResponse`:
+
+    ```json
+    {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "usuario": {
+        "id": 1,
+        "strNombreUsuario": "admin",
+        "idPerfil": 1,
+        "idEstadoUsuario": 1,
+        "strCorreo": "admin@seguridad.com",
+        "strNumeroCelular": "1234567890",
+        "strFotoPerfil": null
+      },
+      "esAdministrador": true,
+      "permisos": [
+        {
+          "idModulo": 1,
+          "strNombreModulo": "Perfil",
+          "bitAgregar": true,
+          "bitEditar": true,
+          "bitConsulta": true,
+          "bitEliminar": true,
+          "bitDetalle": true
+        },
+        {
+          "idModulo": 2,
+          "strNombreModulo": "Módulo",
+          "bitAgregar": true,
+          "bitEditar": true,
+          "bitConsulta": true,
+          "bitEliminar": true,
+          "bitDetalle": true
+        }
+      ]
+    }
+    ```
+
+    **Response body — `LoginResponse`**
+
+    | Field | Type | Description |
+    |---|---|---|
+    | `token` | string | Signed JWT to use in subsequent requests. |
+    | `usuario` | `Usuario` | The authenticated user object. |
+    | `esAdministrador` | boolean | Whether the user's profile has the administrator flag set. |
+    | `permisos` | `List<PermisoConModulo>` | The effective module permissions for this user. |
+
+    <Note>
+      When `esAdministrador` is `true`, the `permisos` list contains **every module** in the system, each with all five permission bits set to `true`. This is computed at login time by `getAllModulosComoPermisos()` — no `PermisosPerfil` records are needed for administrator profiles. When `esAdministrador` is `false`, only the modules that have an explicit `PermisosPerfil` record for the user's profile are included.
+    </Note>
+
+    If the captcha is invalid the server responds with `400 Bad Request`:
+
+    ```json
+    { "error": "Captcha inválido" }
+    ```
+
+    If the credentials are wrong or the user is inactive, the server responds with `401 Unauthorized`:
+
+    ```json
+    { "error": "Credenciales inválidas o usuario inactivo" }
+    ```
+  </Step>
+
+  <Step title="Store the token">
+    Persist the `token` string on the client. Every subsequent request to a protected route must include it.
+
+    <Warning>
+      Never store the JWT in `localStorage` in a browser environment — it is accessible to any JavaScript on the page, making it vulnerable to XSS attacks. Prefer an `HttpOnly` cookie or a secure in-memory store. Do not log or expose the token in client-side error reports.
+    </Warning>
+  </Step>
+
+  <Step title="Call protected endpoints">
+    Pass the token as a Bearer credential in the `Authorization` header:
+
+    ```bash
+    curl http://localhost:8080/api/perfiles \
+      -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    ```
+
+    Ktor's JWT authentication plugin (`auth-jwt`) validates the token on every request. If the `userId` claim is present and the signature is valid, the request proceeds. Otherwise the server returns `401 Unauthorized`.
+  </Step>
+
+  <Step title="Handle token expiry">
+    Tokens are valid for **24 hours** (86 400 000 ms, set in `JwtService.kt`). After expiry, the verifier rejects the token and the server returns `401 Unauthorized`. Your client should detect this response and redirect the user back to the login screen to obtain a fresh token.
+  </Step>
+</Steps>
+
+## JWT claims
+
+The token payload contains the following claims, set by `JwtService.generateToken()`:
+
+| Claim | Type | Description |
+|---|---|---|
+| `sub` | string | The user's `strNombreUsuario`. |
+| `userId` | int | The user's numeric ID. |
+| `perfilId` | int | The numeric ID of the user's profile. |
+| `esAdministrador` | boolean | Whether the profile has the administrator flag. |
+| `iss` | string | Always `"seguridad-app"`. |
+| `iat` | timestamp | Issued-at time. |
+| `exp` | timestamp | Expiry time (issued-at + 86 400 000 ms). |
+
+The algorithm is HMAC-256. The signing key is read from the `JWT_SECRET` environment variable. If that variable is not set, a hardcoded fallback key is used — **always set `JWT_SECRET` in production**.
+
+## Verifying a token
+
+`GET /api/auth/verify` checks whether the token in the current request is still valid. The endpoint is itself protected by `auth-jwt`, so an invalid or expired token returns `401` before the handler runs.
+
+```bash
+curl http://localhost:8080/api/auth/verify \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+A valid token returns:
+
+```json
+{
+  "valid": true,
+  "userId": 1
+}
+```
+
+**`VerifyResponse` fields**
+
+| Field | Type | Description |
+|---|---|---|
+| `valid` | boolean | Always `true` when this response is returned (a missing or invalid token produces a `401` instead). |
+| `userId` | int | The numeric user ID extracted from the `userId` claim. |
+
+Use this endpoint to check session state on page load without re-sending credentials.

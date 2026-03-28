@@ -1,0 +1,127 @@
+---
+title: "Profiles"
+description: "Manage user profiles (roles). All endpoints require a valid Bearer token."
+---
+
+Profiles are the roles in Seguridad App. Every user belongs to exactly one profile. A profile marked as administrator grants unrestricted access to all modules; other profiles are controlled by explicit per-module permissions.
+
+**Base path:** `/api/perfiles`  
+**Auth required:** Yes — `Authorization: Bearer <token>`
+
+---
+
+## List profiles
+
+`GET /api/perfiles`
+
+Returns a paginated list of profiles.
+
+### Query parameters
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed). Defaults to `1`. Each page returns up to 5 records.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{
+  "data": [
+    { "id": 1, "strNombrePerfil": "Administrador", "bitAdministrador": true },
+    { "id": 2, "strNombrePerfil": "Usuario Normal", "bitAdministrador": false }
+  ],
+  "total": 2,
+  "page": 1,
+  "pageSize": 5
+}
+```
+
+---
+
+## Get a profile
+
+`GET /api/perfiles/{id}`
+
+<ParamField path="id" type="integer" required>
+  The profile's ID.
+</ParamField>
+
+Returns the profile object or `404` if not found.
+
+```json
+{ "id": 2, "strNombrePerfil": "Usuario Normal", "bitAdministrador": false }
+```
+
+---
+
+## Create a profile
+
+`POST /api/perfiles`
+
+### Body parameters
+
+<ParamField body="strNombrePerfil" type="string" required>
+  Display name for the profile (e.g., `"Supervisor"`, `"Auditor"`).
+</ParamField>
+<ParamField body="bitAdministrador" type="boolean" required>
+  Set to `true` to grant this profile unrestricted access to all modules. Set to `false` to control access via per-module permissions.
+</ParamField>
+
+### Response — 201 Created
+
+```json
+{ "id": 3 }
+```
+
+### Example
+
+```bash
+curl --request POST \
+  --url https://your-host/api/perfiles \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{"strNombrePerfil": "Supervisor", "bitAdministrador": false}'
+```
+
+<Note>
+  After creating a non-administrator profile, assign module permissions using the [Permissions API](/api/permisos-perfil) so users with this profile can access the application.
+</Note>
+
+---
+
+## Update a profile
+
+`PUT /api/perfiles/{id}`
+
+<ParamField path="id" type="integer" required>
+  The profile's ID.
+</ParamField>
+
+Pass the full profile object in the request body. Returns `{"message": "Perfil actualizado"}` on success.
+
+---
+
+## Delete a profile
+
+`DELETE /api/perfiles/{id}`
+
+<ParamField path="id" type="integer" required>
+  The profile's ID.
+</ParamField>
+
+Returns `{"message": "Perfil eliminado"}` on success, `404` if not found.
+
+<Warning>
+  Deleting a profile that is still assigned to users will leave those users without a valid profile. Reassign or delete affected users first.
+</Warning>
+
+---
+
+## Error responses
+
+| Status | Body | Reason |
+|--------|------|--------|
+| `400 Bad Request` | `{"error": "ID inválido"}` | Path parameter is not a valid integer. |
+| `401 Unauthorized` | — | Missing or invalid Bearer token. |
+| `404 Not Found` | `{"error": "Perfil no encontrado"}` | No profile with the given ID exists. |
+| `500 Internal Server Error` | `{"error": "Error al crear perfil"}` | Database error during creation. |

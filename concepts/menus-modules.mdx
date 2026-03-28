@@ -1,0 +1,193 @@
+---
+title: 'Menus and Modules'
+description: 'How modules represent feature areas and how menus group them for navigation in Seguridad App.'
+keywords: ['menus', 'modules', 'modulo', 'menu', 'navigation', 'MenuModulo', 'permissions']
+---
+
+Seguridad App organises its features into two related concepts: **Modules** are the individual named feature areas of your application, and **Menus** are logical groupings of modules used to drive navigation. Permissions are always granted at the module level — a menu is purely a navigation container.
+
+## Modules
+
+A module (`Modulo`) is a named area of functionality. Every permission record (`PermisosPerfil`) references a module by its numeric ID. Modules have no hierarchy of their own; structure comes from menus.
+
+```kotlin
+data class Modulo(
+    val id: Int = 0,
+    val strNombreModulo: String
+)
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | int | Auto-incremented primary key. |
+| `strNombreModulo` | string | Human-readable name of the feature area. |
+
+<Note>
+  Module names are stored with a uniqueness check in the seed logic — the application skips insertion if a module with the same `strNombreModulo` already exists. Keep names distinct across all modules to avoid ambiguity when referencing them in permission assignments.
+</Note>
+
+## Menus
+
+A menu (`Menu`) is a named collection of modules. It has no permission logic of its own — it is used by the client to render navigation sections.
+
+```kotlin
+data class Menu(
+    val id: Int,
+    val strNombreMenu: String
+)
+```
+
+## The MenuModulo junction
+
+`MenuModulo` is the join table that links menus to their modules. A module can appear in more than one menu.
+
+```kotlin
+data class MenuModulo(
+    val idMenu: Int,
+    val idModulo: Int
+)
+```
+
+## Default seeded data
+
+On first startup `Application.kt` inserts a standard set of modules and menus if none exist. The structure is:
+
+```
+Seguridad
+├── Perfil
+├── Módulo
+├── Permisos-Perfil
+└── Usuario
+
+Principal 1
+├── Principal 1.1
+└── Principal 1.2
+
+Principal 2
+├── Principal 2.1
+└── Principal 2.2
+```
+
+In tabular form:
+
+| Menu | Module |
+|---|---|
+| Seguridad | Perfil |
+| Seguridad | Módulo |
+| Seguridad | Permisos-Perfil |
+| Seguridad | Usuario |
+| Principal 1 | Principal 1.1 |
+| Principal 1 | Principal 1.2 |
+| Principal 2 | Principal 2.1 |
+| Principal 2 | Principal 2.2 |
+
+The `Seguridad` menu covers the four core management modules of the application itself. `Principal 1` and `Principal 2` are placeholder menus intended to be replaced with your application's own feature areas.
+
+## The /api/menus endpoint
+
+`GET /api/menus` returns all menus with their associated modules in a single response. The endpoint requires a valid Bearer token.
+
+```bash
+curl http://localhost:8080/api/menus \
+  -H "Authorization: Bearer <token>"
+```
+
+The response is a `List<MenuResponse>`:
+
+```json
+[
+  {
+    "id": 1,
+    "strNombreMenu": "Seguridad",
+    "modulos": [
+      { "id": 1, "strNombreModulo": "Perfil" },
+      { "id": 2, "strNombreModulo": "Módulo" },
+      { "id": 3, "strNombreModulo": "Permisos-Perfil" },
+      { "id": 4, "strNombreModulo": "Usuario" }
+    ]
+  },
+  {
+    "id": 2,
+    "strNombreMenu": "Principal 1",
+    "modulos": [
+      { "id": 5, "strNombreModulo": "Principal 1.1" },
+      { "id": 6, "strNombreModulo": "Principal 1.2" }
+    ]
+  },
+  {
+    "id": 3,
+    "strNombreMenu": "Principal 2",
+    "modulos": [
+      { "id": 7, "strNombreModulo": "Principal 2.1" },
+      { "id": 8, "strNombreModulo": "Principal 2.2" }
+    ]
+  }
+]
+```
+
+`MenuResponse` shape:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | int | The menu's ID. |
+| `strNombreMenu` | string | The menu's display name. |
+| `modulos` | `List<ModuloResponse>` | The modules linked to this menu, each with `id` and `strNombreModulo`. |
+
+The server builds this response by joining `menus`, `menu_modulos`, and `modulos` tables at query time — the response always reflects the current database state.
+
+## How modules relate to permissions
+
+The `id` of a module is the value used in `PermisosPerfil.idModulo` and `PermisoConModulo.idModulo`. When you grant a profile access to a module, you reference that module's ID. The login response joins the module name so the client receives `strNombreModulo` alongside the permission bits — but the authoritative key is always `idModulo`.
+
+```
+Module (id=4, strNombreModulo="Usuario")
+         │
+         └── PermisosPerfil (idModulo=4, idPerfil=3, bitConsulta=true, ...)
+                                │
+                                └── PermisoConModulo in LoginResponse.permisos
+                                    (idModulo=4, strNombreModulo="Usuario", bitConsulta=true, ...)
+```
+
+Use the `GET /api/menus` response to map module names to IDs before creating permission records.
+
+## Adding a new module
+
+The Modules API (`/api/modulos`) supports full CRUD. You can create new modules via the API and then grant permissions to profiles for those modules.
+
+<Steps>
+  <Step title="Create the module">
+    ```bash
+    curl -X POST http://localhost:8080/api/modulos \
+      -H "Authorization: Bearer <token>" \
+      -H "Content-Type: application/json" \
+      -d '{ "strNombreModulo": "Reportes" }'
+    ```
+
+    ```json
+    { "id": 9 }
+    ```
+  </Step>
+
+  <Step title="Grant permissions to profiles">
+    With the module created, assign `PermisosPerfil` records to the profiles that should have access. See [Roles and Permissions](/concepts/roles-permissions) for the full walkthrough.
+
+    ```bash
+    curl -X POST http://localhost:8080/api/permisos-perfil \
+      -H "Authorization: Bearer <token>" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "idModulo": 9,
+        "idPerfil": 2,
+        "bitAgregar": false,
+        "bitEditar": false,
+        "bitConsulta": true,
+        "bitEliminar": false,
+        "bitDetalle": true
+      }'
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The Menus API only exposes `GET /api/menus` — there is no public endpoint to create menus or link modules to menus. The default menu structure (Seguridad, Principal 1, Principal 2) is seeded at startup. To add custom menus or menu-module links, insert directly into the `menus` and `menu_modulos` database tables.
+</Note>

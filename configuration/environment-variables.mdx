@@ -1,0 +1,93 @@
+---
+title: 'Environment Variables'
+description: 'All environment variables read by the Seguridad App at startup, with defaults and production requirements.'
+---
+
+The application reads configuration exclusively from environment variables at startup. No secrets are baked into the binary — all sensitive values must be injected at runtime.
+
+## Variable reference
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DATABASE_URL` | No | `jdbc:postgresql://localhost:5432/seguridad_db` | Full JDBC connection string to the PostgreSQL database |
+| `DATABASE_USER` | No | `postgres` | PostgreSQL username |
+| `DATABASE_PASSWORD` | No | `postgres` | PostgreSQL password |
+| `JWT_SECRET` | **Yes (production)** | `my-secret-key-for-jwt-authentication-2024-seguridad-app` | Secret key used to sign and verify JWT tokens with HMAC256 |
+| `RECAPTCHA_SECRET` | **Yes (production)** | `6Lcj3ossAAAAAAFK0hIW8FrgfTQfeivriiYQUUEq` | Google reCAPTCHA v2 server-side secret key |
+| `PORT` | No | `8080` | TCP port the HTTP server binds to |
+
+<Warning>
+The default values for `JWT_SECRET` and `RECAPTCHA_SECRET` are publicly known — they appear in the source code of this repository. You **must** override both of these in any environment that is not your local machine. Using the defaults in staging or production allows attackers to forge valid JWT tokens and bypass CAPTCHA validation.
+</Warning>
+
+## Sample `.env` file
+
+Copy this file to your project root and fill in real values before running the application locally or deploying to any shared environment.
+
+```bash .env
+# PostgreSQL connection
+DATABASE_URL=jdbc:postgresql://localhost:5432/seguridad_db
+DATABASE_USER=postgres
+DATABASE_PASSWORD=change_me_in_production
+
+# JWT signing secret — must be a long, random string
+JWT_SECRET=replace_with_a_secure_random_secret
+
+# Google reCAPTCHA v2 secret key (from console.cloud.google.com)
+RECAPTCHA_SECRET=your_recaptcha_secret_key_here
+
+# HTTP server port
+PORT=8080
+```
+
+## Generating a secure JWT secret
+
+<Tip>
+Use `openssl` to generate a cryptographically random secret suitable for production:
+
+```bash
+openssl rand -hex 32
+```
+
+This produces 64 hex characters (256 bits of entropy), which is well above the minimum recommended length for HMAC256 signing.
+</Tip>
+
+## Loading variables at runtime
+
+<Steps>
+  <Step title="Local development">
+    Export variables in your shell before running the app:
+
+    ```bash
+    export JWT_SECRET=$(openssl rand -hex 32)
+    export DATABASE_URL=jdbc:postgresql://localhost:5432/seguridad_db
+    export DATABASE_USER=postgres
+    export DATABASE_PASSWORD=yourpassword
+    export RECAPTCHA_SECRET=your_recaptcha_secret_key_here
+    ./gradlew run
+    ```
+  </Step>
+  <Step title="Docker">
+    Pass variables with `-e` flags or an `--env-file`:
+
+    ```bash
+    docker run \
+      --env-file .env \
+      -p 8080:8080 \
+      seguridad-app
+    ```
+  </Step>
+  <Step title="Docker Compose">
+    Reference variables from a `.env` file in your `docker-compose.yml`:
+
+    ```yaml docker-compose.yml
+    services:
+      app:
+        image: seguridad-app
+        env_file:
+          - .env
+        ports:
+          - "8080:8080"
+    ```
+  </Step>
+</Steps>

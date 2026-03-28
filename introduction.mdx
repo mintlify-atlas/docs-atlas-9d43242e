@@ -1,0 +1,71 @@
+---
+title: "Introduction"
+description: "Seguridad App is a Ktor-based REST API server for user authentication, JWT-based access control, role-based permissions, and module management."
+---
+
+Seguridad App is a backend security service built with Ktor and Kotlin. It handles the full authentication and authorization lifecycle for web applications: users log in, receive a signed JWT, and every subsequent request is validated against their profile's granular per-module permissions. The server manages users, roles (profiles), modules, menus, and permissions through a clean REST API backed by PostgreSQL.
+
+## Key features
+
+**Authentication**
+- JWT authentication using HMAC-256 signing via JJWT 0.12.5
+- Tokens are valid for 24 hours (`86400000 ms`), carrying `userId`, `perfilId`, and `esAdministrador` claims
+- Google reCAPTCHA v2 validation on every login request to block automated attacks
+- bcrypt password hashing with cost factor 12 via `at.favre.lib:bcrypt`
+
+**Authorization**
+- Role-based access control via profiles (`Perfiles`) — every user belongs to exactly one profile
+- Profiles flagged as administrator receive all permissions automatically; all other profiles are controlled by explicit per-module grants
+- Granular permissions per module: add (`bitAgregar`), edit (`bitEditar`), view (`bitConsulta`), delete (`bitEliminar`), and detail (`bitDetalle`)
+
+**User and profile management**
+- Full CRUD for users, including active/inactive status control
+- Profile photo upload via multipart form
+- Initial admin user and two default profiles seeded automatically on first start
+
+**Module and menu hierarchy**
+- Modules represent discrete features or sections of your application
+- Menus group modules for navigation — a `MenuModulos` join table links them
+- Eight seed modules and three seed menus created on first start
+
+**Infrastructure**
+- PostgreSQL database with Exposed ORM and HikariCP connection pooling (max 10 connections, `REPEATABLE_READ` isolation)
+- SSL required on all database connections
+- Multi-stage Docker build — final image is `eclipse-temurin:21-jre-jammy`
+- Fat JAR (`seguridad-app-all.jar`) for standalone deployment
+
+## Tech stack
+
+| Component | Version |
+|---|---|
+| Kotlin | 1.9.23 |
+| Ktor | 2.3.10 |
+| JVM target | 21 (JDK 21) |
+| Exposed ORM | 0.48.0 |
+| PostgreSQL driver | 42.7.3 |
+| HikariCP | 5.1.0 |
+| JJWT | 0.12.5 |
+| bcrypt | 0.10.2 |
+| Logback | 1.4.14 |
+| Netty (engine) | bundled with Ktor 2.3.10 |
+
+## Explore the docs
+
+<CardGroup cols={2}>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Clone the repo, set environment variables, and make your first API call.
+  </Card>
+  <Card title="Authentication" icon="lock" href="/concepts/authentication">
+    Understand how JWT tokens are issued, validated, and used across requests.
+  </Card>
+  <Card title="Roles and permissions" icon="shield-halved" href="/concepts/roles-permissions">
+    Learn how profiles and per-module permission grants control access.
+  </Card>
+  <Card title="Login endpoint" icon="arrow-right-to-bracket" href="/api/auth/login">
+    Full reference for `POST /api/auth/login` — request shape, response fields, and error codes.
+  </Card>
+</CardGroup>
+
+<Note>
+  On first start, the server seeds a default administrator account with username `admin` and password `Admin123`. This account has unrestricted access to all endpoints. Change this password before deploying to any environment accessible from the internet.
+</Note>

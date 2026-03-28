@@ -1,0 +1,182 @@
+---
+title: "Permissions"
+description: "Manage per-module permissions for profiles. All endpoints require a valid Bearer token."
+---
+
+The Permissions API controls what each profile can do within each module. A `PermisosPerfil` record links a profile to a module and specifies five granular access flags: add, edit, view, delete, and detail.
+
+**Base path:** `/api/permisos-perfil`  
+**Auth required:** Yes — `Authorization: Bearer <token>`
+
+<Note>
+  Profiles with `bitAdministrador: true` bypass permission checks entirely — they have all permissions on all modules automatically. You only need to create `PermisosPerfil` records for non-administrator profiles.
+</Note>
+
+---
+
+## Permission flags
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `bitAgregar` | boolean | Can create new records in this module |
+| `bitEditar` | boolean | Can edit existing records |
+| `bitConsulta` | boolean | Can read / query records |
+| `bitEliminar` | boolean | Can delete records |
+| `bitDetalle` | boolean | Can view record detail views |
+
+---
+
+## List permissions
+
+`GET /api/permisos-perfil`
+
+Returns a paginated list of permission records.
+
+### Query parameters
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed). Defaults to `1`. Each page returns up to 5 records.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "idModulo": 4,
+      "idPerfil": 2,
+      "bitAgregar": true,
+      "bitEditar": true,
+      "bitConsulta": true,
+      "bitEliminar": false,
+      "bitDetalle": true
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 5
+}
+```
+
+---
+
+## Get a permission record
+
+`GET /api/permisos-perfil/{id}`
+
+<ParamField path="id" type="integer" required>
+  The permission record's ID.
+</ParamField>
+
+Returns the `PermisosPerfil` object or `404` if not found.
+
+---
+
+## Create a permission record
+
+`POST /api/permisos-perfil`
+
+Assign permissions for a specific profile on a specific module.
+
+### Body parameters
+
+<ParamField body="idModulo" type="integer" required>
+  ID of the module to assign permissions for.
+</ParamField>
+<ParamField body="idPerfil" type="integer" required>
+  ID of the profile to assign permissions to.
+</ParamField>
+<ParamField body="bitAgregar" type="boolean" required>
+  Grant create access.
+</ParamField>
+<ParamField body="bitEditar" type="boolean" required>
+  Grant edit access.
+</ParamField>
+<ParamField body="bitConsulta" type="boolean" required>
+  Grant read/view access.
+</ParamField>
+<ParamField body="bitEliminar" type="boolean" required>
+  Grant delete access.
+</ParamField>
+<ParamField body="bitDetalle" type="boolean" required>
+  Grant detail-view access.
+</ParamField>
+
+### Response — 201 Created
+
+```json
+{ "id": 5 }
+```
+
+### Example — read-only access to the "Usuario" module (id 4) for profile 2
+
+```bash
+curl --request POST \
+  --url https://your-host/api/permisos-perfil \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "idModulo": 4,
+    "idPerfil": 2,
+    "bitAgregar": false,
+    "bitEditar": false,
+    "bitConsulta": true,
+    "bitEliminar": false,
+    "bitDetalle": true
+  }'
+```
+
+---
+
+## Update a permission record
+
+`PUT /api/permisos-perfil/{id}`
+
+<ParamField path="id" type="integer" required>
+  The permission record's ID.
+</ParamField>
+
+Pass the full `PermisosPerfil` object. Returns `{"message": "Permisos actualizados"}` on success.
+
+### Example — upgrade to full access
+
+```bash
+curl --request PUT \
+  --url https://your-host/api/permisos-perfil/5 \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "idModulo": 4,
+    "idPerfil": 2,
+    "bitAgregar": true,
+    "bitEditar": true,
+    "bitConsulta": true,
+    "bitEliminar": true,
+    "bitDetalle": true
+  }'
+```
+
+---
+
+## Delete a permission record
+
+`DELETE /api/permisos-perfil/{id}`
+
+<ParamField path="id" type="integer" required>
+  The permission record's ID.
+</ParamField>
+
+Returns `{"message": "Permisos eliminados"}` on success, `404` if not found.
+
+---
+
+## Error responses
+
+| Status | Body | Reason |
+|--------|------|--------|
+| `400 Bad Request` | `{"error": "ID inválido"}` | Path parameter is not a valid integer. |
+| `401 Unauthorized` | — | Missing or invalid Bearer token. |
+| `404 Not Found` | `{"error": "Permisos no encontrados"}` | No record with the given ID exists. |
+| `500 Internal Server Error` | `{"error": "Error al crear permisos"}` | Database error during creation. |

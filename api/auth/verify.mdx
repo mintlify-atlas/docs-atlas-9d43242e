@@ -1,0 +1,65 @@
+---
+title: "GET /api/auth/verify"
+description: "Verify a JWT token and return the authenticated user's ID."
+---
+
+Validates the Bearer token supplied in the `Authorization` header and returns the user ID encoded in it. Use this endpoint to confirm that a session is still active before making sensitive requests.
+
+## Request
+
+**Method:** `GET`  
+**Path:** `/api/auth/verify`  
+**Auth required:** Yes — Bearer token
+
+No request body.
+
+### Headers
+
+| Header | Value | Required |
+|--------|-------|----------|
+| `Authorization` | `Bearer <token>` | Yes |
+
+## Response
+
+### 200 OK
+
+<ResponseField name="valid" type="boolean">
+  Always `true` when the token passes validation.
+</ResponseField>
+
+<ResponseField name="userId" type="integer">
+  The authenticated user's ID, extracted from the `userId` claim in the JWT.
+</ResponseField>
+
+<Tip>
+  Call this endpoint at application startup (or before a sensitive operation) to
+  verify that the stored token has not expired. A `200` response with
+  `"valid": true` confirms the session is still active and tells you which user
+  is authenticated.
+</Tip>
+
+## Error responses
+
+| Status | Body | Reason |
+|--------|------|--------|
+| `401 Unauthorized` | `{"error": "Token inválido"}` | The token was present but the `userId` claim could not be read (malformed or tampered payload). |
+| `401 Unauthorized` | `{"error": "No autenticado"}` | No `Authorization` header was provided, or the token failed JWT signature/expiry verification. |
+
+## Examples
+
+### Request
+
+```bash
+curl --request GET \
+  --url https://your-host/api/auth/verify \
+  --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+```
+
+### Response
+
+```json
+{
+  "valid": true,
+  "userId": 1
+}
+```

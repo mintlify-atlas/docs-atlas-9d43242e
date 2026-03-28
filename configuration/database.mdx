@@ -1,0 +1,204 @@
+---
+title: 'Database Setup'
+description: 'PostgreSQL configuration, schema reference, and initial seed data for the Seguridad App.'
+---
+
+The Seguridad App uses **PostgreSQL** as its database. The data access layer is built on [Jetbrains Exposed](https://github.com/JetBrains/Exposed) (ORM) with [HikariCP](https://github.com/brettwooldridge/HikariCP) managing the connection pool.
+
+## Connecting to the database
+
+Connection details are read from environment variables at startup. See [Environment Variables](/configuration/environment-variables) for the full list. The defaults point to a local PostgreSQL instance:
+
+```bash
+DATABASE_URL=jdbc:postgresql://localhost:5432/seguridad_db
+DATABASE_USER=postgres
+DATABASE_PASSWORD=postgres
+```
+
+<Note>
+All connections require SSL. The HikariCP pool is configured with `sslmode=require`, so your PostgreSQL server must accept SSL connections. Cloud-hosted databases (e.g., Railway, Supabase, Render) enable this by default. For a local instance, you may need to configure `ssl=true` in your PostgreSQL server settings or adjust the JDBC URL to `sslmode=disable` for development only.
+</Note>
+
+### Connection pool settings
+
+HikariCP is configured with the following fixed parameters (from `Database.kt`):
+
+| Setting | Value |
+|---|---|
+| Maximum pool size | `10` connections |
+| Auto-commit | `false` |
+| Transaction isolation | `TRANSACTION_REPEATABLE_READ` |
+| SSL mode | `require` |
+
+## Schema
+
+All tables are created automatically on server startup using `SchemaUtils.create()`. If the tables already exist, the call is a no-op — existing data is never dropped.
+
+### `perfiles`
+
+Stores user profiles (roles). Each profile can be flagged as an administrator.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `integer` (PK, autoincrement) | Unique profile identifier |
+| `str_nombre_perfil` | `varchar(100)` | Profile name (e.g., "Administrador") |
+| `bit_administrador` | `boolean` | Whether this profile has administrator privileges |
+
+### `usuarios`
+
+Stores application users. Passwords are stored as bcrypt hashes — never plain text.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `integer` (PK, autoincrement) | Unique user identifier |
+| `str_nombre_usuario` | `varchar(100)` | Username used for login |
+| `id_perfil` | `integer` | FK reference to `perfiles.id` |
+| `str_pwd` | `varchar(255)` | bcrypt-hashed password |
+| `id_estado_usuario` | `integer` | User status (`1` = active) |
+| `str_correo` | `varchar(150)` | Email address |
+| `str_numero_celular` | `varchar(20)` | Mobile phone number |
+| `str_foto_perfil` | `varchar(255)` (nullable) | Path or URL to the user's profile photo |
+
+<Note>
+Passwords are always stored as bcrypt hashes with cost factor 12. The `str_pwd` column will never contain a plain-text password. See [Security Configuration](/configuration/security) for details on the password hashing scheme.
+</Note>
+
+### `modulos`
+
+Represents functional modules of the application (e.g., "Usuario", "Perfil"). Modules are the granular units of access control.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `integer` (PK, autoincrement) | Unique module identifier |
+| `str_nombre_modulo` | `varchar(100)` | Module name |
+
+### `permisos_perfiles`
+
+Defines what actions a given profile can perform on a given module. Each row is the intersection of one profile and one module.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `integer` (PK, autoincrement) | Unique permission row identifier |
+| `id_modulo` | `integer` | FK reference to `modulos.id` |
+| `id_perfil` | `integer` | FK reference to `perfiles.id` |
+| `bit_agregar` | `boolean` | Permission to create records |
+| `bit_editar` | `boolean` | Permission to edit records |
+| `bit_consulta` | `boolean` | Permission to read/query records |
+| `bit_eliminar` | `boolean` | Permission to delete records |
+| `bit_detalle` | `boolean` | Permission to view detail views |
+
+### `menus`
+
+Top-level navigation menus that group related modules together.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `integer` (PK, autoincrement) | Unique menu identifier |
+| `str_nombre_menu` | `varchar(100)` | Menu display name |
+
+### `menu_modulos`
+
+Join table linking menus to their constituent modules.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | `integer` (PK, autoincrement) | Unique row identifier |
+| `id_menu` | `integer` | FK reference to `menus.id` |
+| `id_modulo` | `integer` | FK reference to `modulos.id` |
+
+## Initial seed data
+
+On first startup, the application checks each table and inserts seed data if the table is empty. This means a fresh database is immediately usable without any manual setup.
+
+### Profiles
+
+Two profiles are created:
+
+| `str_nombre_perfil` | `bit_administrador` |
+|---|---|
+| `Administrador` | `true` |
+| `Usuario Normal` | `false` |
+
+### Default admin user
+
+One administrator account is created if no users exist:
+
+| Field | Value |
+|---|---|
+| Username | `admin` |
+| Password | `Admin123` (bcrypt-hashed at cost 12) |
+| Email | `admin@seguridad.com` |
+| Phone | `1234567890` |
+| Status | `1` (active) |
+| Profile | `Administrador` |
+
+<Warning>
+Change the default admin password immediately after your first login. The plaintext value `Admin123` is publicly known from the source code. You can update it through the user management API once authenticated.
+</Warning>
+
+### Modules
+
+Eight modules are seeded on startup:
+
+| `str_nombre_modulo` |
+|---|
+| `Perfil` |
+| `Módulo` |
+| `Permisos-Perfil` |
+| `Usuario` |
+| `Principal 1.1` |
+| `Principal 1.2` |
+| `Principal 2.1` |
+| `Principal 2.2` |
+
+### Menus and module assignments
+
+Three menus are created and linked to their modules:
+
+| Menu | Linked modules |
+|---|---|
+| `Seguridad` | Perfil, Módulo, Permisos-Perfil, Usuario |
+| `Principal 1` | Principal 1.1, Principal 1.2 |
+| `Principal 2` | Principal 2.1, Principal 2.2 |
+
+## Starting a local PostgreSQL instance
+
+<Steps>
+  <Step title="Run PostgreSQL with Docker">
+    The quickest way to get a local database running:
+
+    ```bash
+    docker run -d \
+      --name seguridad-db \
+      -e POSTGRES_DB=seguridad_db \
+      -e POSTGRES_USER=postgres \
+      -e POSTGRES_PASSWORD=postgres \
+      -p 5432:5432 \
+      postgres:16
+    ```
+  </Step>
+  <Step title="Set environment variables">
+    Configure the app to connect to your local instance:
+
+    ```bash
+    export DATABASE_URL=jdbc:postgresql://localhost:5432/seguridad_db
+    export DATABASE_USER=postgres
+    export DATABASE_PASSWORD=postgres
+    ```
+
+    For local development only, you may need to disable SSL enforcement by appending `?sslmode=disable` to `DATABASE_URL`:
+
+    ```bash
+    export DATABASE_URL=jdbc:postgresql://localhost:5432/seguridad_db?sslmode=disable
+    ```
+  </Step>
+  <Step title="Start the application">
+    On first start, all tables are created and seed data is inserted automatically:
+
+    ```bash
+    ./gradlew run
+    ```
+
+    You should see the tables created and the initial data inserted in the startup logs.
+  </Step>
+</Steps>

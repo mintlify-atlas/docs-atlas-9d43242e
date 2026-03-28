@@ -1,0 +1,176 @@
+---
+title: "Deployment"
+description: "Deploy Seguridad App to production using the multi-stage Docker build or a standalone fat JAR."
+---
+
+Seguridad App ships with a multi-stage `Dockerfile` that compiles the application in a Gradle/JDK 21 build stage and copies only the fat JAR into a minimal `eclipse-temurin:21-jre-jammy` runtime image. The final image contains no build tools and no source code.
+
+## Dockerfile
+
+```dockerfile
+# Etapa 1: Build
+FROM gradle:8.5-jdk21 AS build
+WORKDIR /app
+COPY . .
+RUN gradle buildFatJar --no-daemon
+
+# Etapa 2: Runtime
+FROM eclipse-temurin:21-jre-jammy
+WORKDIR /app
+COPY --from=build /app/build/libs/seguridad-app-all.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+The fat JAR produced by the build stage is named `seguridad-app-all.jar` (configured in `build.gradle.kts` via `ktor { fatJar { archiveFileName.set("seguridad-app-all.jar") } }`). The runtime stage copies it to `/app/app.jar` and runs it directly with the JRE.
+
+## Docker deployment
+
+<Steps>
+  <Step title="Build the fat JAR">
+    If you want to build the JAR locally first (for example, to inspect it or cache the Gradle step outside Docker):
+
+    ```bash
+    ./gradlew buildFatJar
+    ```
+
+    The output is written to `build/libs/seguridad-app-all.jar`. You can also skip this step and let the Docker build handle it in the next step.
+  </Step>
+
+  <Step title="Build the Docker image">
+    <CodeGroup>
+
+    ```bash Gradle task
+    ./gradlew buildImage
+    ```
+
+    ```bash Docker CLI
+    docker build -t seguridad-app .
+    ```
+
+    </CodeGroup>
+
+    The `buildImage` Gradle task delegates to the Ktor plugin, which calls `docker build` internally. Both commands produce an equivalent image tagged `seguridad-app`.
+
+    To tag with a version:
+
+    ```bash
+    docker build -t seguridad-app:0.0.1 .
+    ```
+  </Step>
+
+  <Step title="Run the container">
+    Pass all required environment variables with `-e` flags. The server binds to port `8080` inside the container; map it to your host with `-p`.
+
+    ```bash
+    docker run -d \
+      --name seguridad-app \
+      -p 8080:8080 \
+      -e DATABASE_URL="jdbc:postgresql://your-db-host:5432/seguridad_db" \
+      -e DATABASE_USER="your-db-user" \
+      -e DATABASE_PASSWORD="your-db-password" \
+      -e JWT_SECRET="your-strong-random-jwt-secret" \
+      -e RECAPTCHA_SECRET="your-recaptcha-server-secret" \
+      seguridad-app
+    ```
+
+    Verify the container is running:
+
+    ```bash
+    docker logs seguridad-app
+    ```
+
+    You should see:
+
+    ```
+    2024-12-04 14:32:45.584 [main] INFO  Application - Application started in 0.303 seconds.
+    2024-12-04 14:32:45.682 [main] INFO  Application - Responding at http://0.0.0.0:8080
+    ```
+  </Step>
+</Steps>
+
+## Environment variables
+
+All configuration is injected at runtime via environment variables. The application has built-in defaults for local development, but every variable must be explicitly set in production.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DATABASE_URL` | Yes | `jdbc:postgresql://localhost:5432/seguridad_db` | Full JDBC connection URL for the PostgreSQL database |
+| `DATABASE_USER` | Yes | `postgres` | PostgreSQL username |
+| `DATABASE_PASSWORD` | Yes | `postgres` | PostgreSQL password |
+| `JWT_SECRET` | Yes | `my-secret-key-for-jwt-authentication-2024-seguridad-app` | HMAC-256 key used to sign and verify JWT tokens. Tokens expire after 24 hours. |
+| `RECAPTCHA_SECRET` | Yes | `6Lcj3ossAAAAAAFK0hIW8FrgfTQfeivriiYQUUEq` | Google reCAPTCHA v2 server-side secret, validated on every login request |
+
+<Warning>
+  The default `JWT_SECRET` is committed to the public repository. Any token signed with it can be forged by anyone. Always set a strong, unique secret before exposing the server to the internet.
+</Warning>
+
+## Database requirements
+
+The application connects to PostgreSQL with SSL required (`sslmode=require`). Make sure your database server has SSL enabled and is reachable from the container. HikariCP maintains a connection pool of up to 10 connections with `REPEATABLE_READ` transaction isolation.
+
+On first start, the application calls `SchemaUtils.create(...)` to create the following tables if they do not exist:
+
+- `Perfiles` — user profiles / roles
+- `Usuarios` — user accounts
+- `Modulos` — application modules
+- `PermisosPerfiles` — per-profile, per-module permission grants
+- `Menus` — navigation menus
+- `MenuModulos` — join table linking menus to modules
+
+No manual schema migration is needed for a fresh database.
+
+## Production recommendations
+
+<Tip>
+  Store `JWT_SECRET`, `DATABASE_PASSWORD`, and `RECAPTCHA_SECRET` in a secrets manager (e.g., AWS Secrets Manager, HashiCorp Vault, or Docker Swarm secrets) rather than passing them as plain environment variables in `docker run` commands or Compose files. Plain environment variables are visible in `docker inspect` output.
+</Tip>
+
+<Tip>
+  Set `JWT_SECRET` to a randomly generated string of at least 32 characters. A convenient way to generate one:
+
+  ```bash
+  openssl rand -hex 32
+  ```
+</Tip>
+
+- Place the container behind a TLS-terminating reverse proxy (nginx, Caddy, or a cloud load balancer). The application itself serves plain HTTP on port `8080`.
+- Change the default `admin` / `Admin123` credentials immediately after the first start. The seed data is only inserted when the `Usuarios` table is empty.
+- Monitor the HikariCP pool metrics if you expect high concurrency. The default maximum pool size is `10`; adjust via a custom `HikariConfig` if needed.
+
+## Running with Docker Compose
+
+For a self-contained local or staging environment, pair the application container with a PostgreSQL container:
+
+```yaml
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: seguridad_db
+    ports:
+      - "5432:5432"
+
+  app:
+    image: seguridad-app
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/seguridad_db
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      JWT_SECRET: replace-with-a-long-random-secret
+      RECAPTCHA_SECRET: your-recaptcha-secret-key
+    depends_on:
+      - db
+```
+
+```bash
+docker compose up -d
+```
+
+<Note>
+  The `DATABASE_URL` uses the Compose service name `db` as the hostname. Docker's internal DNS resolves service names within the same Compose network automatically.
+</Note>

@@ -1,0 +1,82 @@
+{
+  "projectType": "saas",
+  "projectName": "Seguridad App",
+  "projectDescription": "A Ktor-based security management API that handles user authentication, role-based access control, profile management, and module-level permissions with JWT and reCAPTCHA support.",
+  "theme": "luma",
+  "primaryColor": "#c03fd3",
+  "lightColor": "#c71a69",
+  "darkColor": "#252c2d",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart", "deployment"]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": ["concepts/authentication", "concepts/roles-permissions", "concepts/menus-modules"]
+          },
+          {
+            "group": "Configuration",
+            "pages": ["configuration/environment-variables", "configuration/database", "configuration/security"]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": ["api/auth/login", "api/auth/verify"]
+          },
+          {
+            "group": "Resources",
+            "pages": ["api/usuarios", "api/perfiles", "api/modulos", "api/permisos-perfil", "api/menus"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "JWT-based authentication with 24-hour token expiry",
+    "Google reCAPTCHA v2 integration on login",
+    "Role-based access control with granular per-module permissions (add, edit, view, delete, detail)",
+    "Profile management with administrator flag",
+    "User management with photo upload support",
+    "Menu and module hierarchy system",
+    "PostgreSQL database with Exposed ORM and HikariCP connection pool",
+    "Bcrypt password hashing",
+    "Docker support with fat JAR packaging",
+    "Paginated list endpoints for all resources"
+  ],
+  "publicApiSurface": [
+    "POST /api/auth/login",
+    "GET /api/auth/verify",
+    "GET /api/usuarios",
+    "GET /api/usuarios/{id}",
+    "POST /api/usuarios",
+    "PUT /api/usuarios/{id}",
+    "DELETE /api/usuarios/{id}",
+    "POST /api/usuarios/{id}/foto",
+    "GET /api/perfiles",
+    "GET /api/perfiles/{id}",
+    "POST /api/perfiles",
+    "PUT /api/perfiles/{id}",
+    "DELETE /api/perfiles/{id}",
+    "GET /api/modulos",
+    "GET /api/modulos/all",
+    "GET /api/modulos/{id}",
+    "POST /api/modulos",
+    "PUT /api/modulos/{id}",
+    "DELETE /api/modulos/{id}",
+    "GET /api/permisos-perfil",
+    "GET /api/permisos-perfil/{id}",
+    "POST /api/permisos-perfil",
+    "PUT /api/permisos-perfil/{id}",
+    "DELETE /api/permisos-perfil/{id}",
+    "GET /api/menu"
+  ]
+}

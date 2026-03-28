@@ -1,0 +1,151 @@
+---
+title: "POST /api/auth/login"
+description: "Authenticate a user and receive a signed JWT token."
+---
+
+Validates the provided credentials and a Google reCAPTCHA v2 token. On success, returns a signed JWT and the authenticated user's profile and permissions.
+
+## Request
+
+**Method:** `POST`  
+**Path:** `/api/auth/login`  
+**Auth required:** No
+
+### Body parameters
+
+<ParamField body="username" type="string" required>
+  The user's login name.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The user's password.
+</ParamField>
+
+<ParamField body="recaptchaToken" type="string" required>
+  Google reCAPTCHA v2 token obtained client-side before submitting the form.
+</ParamField>
+
+## Response
+
+### 200 OK
+
+<ResponseField name="token" type="string">
+  Signed JWT (HMAC-SHA256), issued by `seguridad-app`. Valid for 24 hours. The
+  token encodes the claims `userId`, `perfilId`, and `esAdministrador`.
+</ResponseField>
+
+<ResponseField name="usuario" type="object">
+  The authenticated user.
+  <Expandable title="properties">
+    <ResponseField name="id" type="integer">
+      Unique user ID.
+    </ResponseField>
+    <ResponseField name="strNombreUsuario" type="string">
+      The user's login name.
+    </ResponseField>
+    <ResponseField name="idPerfil" type="integer">
+      ID of the profile (role) assigned to this user.
+    </ResponseField>
+    <ResponseField name="idEstadoUsuario" type="integer">
+      ID of the user's current status (e.g., active, inactive).
+    </ResponseField>
+    <ResponseField name="strCorreo" type="string">
+      The user's email address.
+    </ResponseField>
+    <ResponseField name="strNumeroCelular" type="string">
+      The user's mobile phone number.
+    </ResponseField>
+    <ResponseField name="strFotoPerfil" type="string | null">
+      URL or path to the user's profile photo. `null` when not set.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="esAdministrador" type="boolean">
+  Whether the user's profile has the administrator flag set.
+</ResponseField>
+
+<ResponseField name="permisos" type="array of PermisoConModulo">
+  The list of module permissions for this user.
+  <Expandable title="PermisoConModulo properties">
+    <ResponseField name="idModulo" type="integer">
+      ID of the module.
+    </ResponseField>
+    <ResponseField name="strNombreModulo" type="string">
+      Display name of the module.
+    </ResponseField>
+    <ResponseField name="bitAgregar" type="boolean">
+      Permission to create records.
+    </ResponseField>
+    <ResponseField name="bitEditar" type="boolean">
+      Permission to edit records.
+    </ResponseField>
+    <ResponseField name="bitConsulta" type="boolean">
+      Permission to read/query records.
+    </ResponseField>
+    <ResponseField name="bitEliminar" type="boolean">
+      Permission to delete records.
+    </ResponseField>
+    <ResponseField name="bitDetalle" type="boolean">
+      Permission to view record detail.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Note>
+  When `esAdministrador` is `true`, the `permisos` array contains an entry for
+  **every module** in the system — not just those explicitly assigned to the
+  profile. All permission flags (`bitAgregar`, `bitEditar`, etc.) are set to
+  `true` for each entry.
+</Note>
+
+## Error responses
+
+| Status | Body | Reason |
+|--------|------|--------|
+| `400 Bad Request` | `{"error": "Captcha inválido"}` | The `recaptchaToken` failed server-side reCAPTCHA validation. |
+| `401 Unauthorized` | `{"error": "Credenciales inválidas o usuario inactivo"}` | The username/password combination is wrong, or the user's account is inactive. |
+
+## Examples
+
+### Request
+
+```bash
+curl --request POST \
+  --url https://your-host/api/auth/login \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "username": "jdoe",
+    "password": "s3cr3tP@ss",
+    "recaptchaToken": "03AGdBq24..."
+  }'
+```
+
+### Response
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqZG9lIiwidXNlcklkIjoxLCJwZXJmaWxJZCI6MiwiZXNBZG1pbmlzdHJhZG9yIjpmYWxzZSwiaXNzIjoic2VndXJpZGFkLWFwcCIsImlhdCI6MTcxMTYzMjAwMCwiZXhwIjoxNzExNzE4NDAwfQ.SIGNATURE",
+  "usuario": {
+    "id": 1,
+    "strNombreUsuario": "jdoe",
+    "idPerfil": 2,
+    "idEstadoUsuario": 1,
+    "strCorreo": "jdoe@example.com",
+    "strNumeroCelular": "+50212345678",
+    "strFotoPerfil": null
+  },
+  "esAdministrador": false,
+  "permisos": [
+    {
+      "idModulo": 3,
+      "strNombreModulo": "Usuarios",
+      "bitAgregar": true,
+      "bitEditar": true,
+      "bitConsulta": true,
+      "bitEliminar": false,
+      "bitDetalle": true
+    }
+  ]
+}
+```

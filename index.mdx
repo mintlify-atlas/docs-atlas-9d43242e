@@ -1,97 +1,53 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Welcome to Seguridad App"
+description: "A Ktor-based security management API for user authentication, role-based access control, and module-level permissions."
 ---
 
-## Setting up
+Seguridad App is a backend security platform built with Ktor and Kotlin. It provides JWT authentication, granular role-based access control, user and profile management, and a module/menu hierarchy — all exposed through a clean REST API.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get the server running locally in a few minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="API Reference" icon="code" href="/api/auth/login">
+    Explore every endpoint with request and response details.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Authentication" icon="lock" href="/concepts/authentication">
+    Understand JWT-based auth and how to obtain tokens.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Roles & Permissions" icon="shield-halved" href="/concepts/roles-permissions">
+    Learn how profiles and per-module permissions work.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What Seguridad App does
 
-Everything you need to create world-class documentation.
+Seguridad App gives you a complete security layer you can integrate into any web application:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+- **JWT Authentication** — Users log in and receive a signed token valid for 24 hours. All protected endpoints require this token as a Bearer header.
+- **Role-based profiles** — Every user belongs to a profile. Profiles marked as administrator have unrestricted access; others are controlled by per-module permissions.
+- **Granular permissions** — Each profile can be granted add, edit, view, delete, and detail rights on a per-module basis.
+- **User management** — Create, update, and deactivate users. Upload profile photos via multipart form.
+- **Module & menu hierarchy** — Modules represent features in your application. Menus group modules for navigation.
+- **reCAPTCHA protection** — Login requires a valid Google reCAPTCHA v2 token to prevent automated attacks.
 
-## Need inspiration?
+## Getting started
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<Steps>
+  <Step title="Clone and configure">
+    Clone the repository and set your environment variables — database URL, JWT secret, and reCAPTCHA keys.
+  </Step>
+  <Step title="Start the server">
+    Run `./gradlew run` or use Docker. The server starts on port 8080 and creates all database tables automatically.
+  </Step>
+  <Step title="Log in">
+    Send a `POST /api/auth/login` request with credentials and a reCAPTCHA token. You'll receive a JWT to use in subsequent requests.
+  </Step>
+  <Step title="Call protected endpoints">
+    Pass the token as `Authorization: Bearer <token>` on any resource endpoint to manage users, profiles, modules, and permissions.
+  </Step>
+</Steps>
+
+<Note>
+  The server seeds an `admin` / `Admin123` user on first start. Change this password immediately in a production deployment.
+</Note>

@@ -1,0 +1,191 @@
+---
+title: 'Roles and Permissions'
+description: 'How profiles, administrator flags, and per-module permission bits control access in Seguridad App.'
+keywords: ['roles', 'permissions', 'profile', 'perfil', 'modules', 'bitAgregar', 'bitEditar', 'bitConsulta', 'bitEliminar', 'bitDetalle']
+---
+
+Seguridad App uses a two-level access control model: **Profiles** (roles) define what kind of user someone is, and **PermisosPerfil** records define exactly what that profile can do inside each module. At login time the server resolves the user's effective permissions and returns them in the `LoginResponse`, so the client does not need to make additional requests to determine what the user can access.
+
+## Profiles
+
+A profile (`Perfil`) is the role assigned to a user. Every user has exactly one profile.
+
+```kotlin
+data class Perfil(
+    val id: Int = 0,
+    val strNombrePerfil: String,
+    val bitAdministrador: Boolean
+)
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | int | Auto-incremented primary key. |
+| `strNombrePerfil` | string | Human-readable name for the role, e.g. `"Administrador"` or `"Usuario Normal"`. |
+| `bitAdministrador` | boolean | When `true`, the user is treated as a superuser with full access to every module. |
+
+<Note>
+  When `bitAdministrador` is `true`, the login endpoint calls `getAllModulosComoPermisos()`, which returns every module in the database with all five permission bits set to `true`. No `PermisosPerfil` records are required for administrator profiles — you do not need to create them. Non-administrator profiles only receive permissions for the modules where an explicit `PermisosPerfil` record exists.
+</Note>
+
+Two profiles are seeded on first startup: `"Administrador"` (with `bitAdministrador = true`) and `"Usuario Normal"` (with `bitAdministrador = false`).
+
+## Permission records
+
+A `PermisosPerfil` record links a profile to a module and specifies five individual permission bits.
+
+```kotlin
+data class PermisosPerfil(
+    val id: Int = 0,
+    val idModulo: Int,
+    val idPerfil: Int,
+    val bitAgregar: Boolean,
+    val bitEditar: Boolean,
+    val bitConsulta: Boolean,
+    val bitEliminar: Boolean,
+    val bitDetalle: Boolean
+)
+```
+
+### Permission bits
+
+| Field | Controls |
+|---|---|
+| `bitAgregar` | Create new records in the module (Add). |
+| `bitEditar` | Modify existing records (Edit). |
+| `bitConsulta` | Read or list records (View). |
+| `bitEliminar` | Delete records (Delete). |
+| `bitDetalle` | View the detail screen of a single record (Detail). |
+
+You can grant any combination of these bits. For example, a read-only role would have `bitConsulta = true` and all other bits `false`.
+
+## What the login response returns
+
+At login the server resolves permissions and returns them as a flat list of `PermisoConModulo` objects — one entry per module the profile has access to. This is the `permisos` array in `LoginResponse`.
+
+```kotlin
+data class PermisoConModulo(
+    val idModulo: Int,
+    val strNombreModulo: String,
+    val bitAgregar: Boolean,
+    val bitEditar: Boolean,
+    val bitConsulta: Boolean,
+    val bitEliminar: Boolean,
+    val bitDetalle: Boolean
+)
+```
+
+The `strNombreModulo` field is joined from the `modulos` table so the client receives the human-readable module name alongside the permission bits, without needing a second request.
+
+## Setting up a new role with permissions
+
+<Steps>
+  <Step title="Create the profile">
+    Send a POST request to `/api/perfiles` with the profile name and whether it should be an administrator:
+
+    ```bash
+    curl -X POST http://localhost:8080/api/perfiles \
+      -H "Authorization: Bearer <token>" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "strNombrePerfil": "Supervisor",
+        "bitAdministrador": false
+      }'
+    ```
+
+    The server returns the new profile's ID:
+
+    ```json
+    { "id": 3 }
+    ```
+  </Step>
+
+  <Step title="Look up the module IDs">
+    Retrieve the list of available modules to find the IDs you want to grant permissions for:
+
+    ```bash
+    curl http://localhost:8080/api/modulos \
+      -H "Authorization: Bearer <token>"
+    ```
+
+    ```json
+    {
+      "data": [
+        { "id": 1, "strNombreModulo": "Perfil" },
+        { "id": 2, "strNombreModulo": "Módulo" },
+        { "id": 3, "strNombreModulo": "Permisos-Perfil" },
+        { "id": 4, "strNombreModulo": "Usuario" },
+        { "id": 5, "strNombreModulo": "Principal 1.1" },
+        { "id": 6, "strNombreModulo": "Principal 1.2" },
+        { "id": 7, "strNombreModulo": "Principal 2.1" },
+        { "id": 8, "strNombreModulo": "Principal 2.2" }
+      ],
+      "total": 8,
+      "page": 1,
+      "pageSize": 5
+    }
+    ```
+  </Step>
+
+  <Step title="Assign permissions per module">
+    Create one `PermisosPerfil` record for each module the profile needs access to. Here the `Supervisor` profile (id `3`) gets read and detail access to the `Usuario` module (id `4`):
+
+    ```bash
+    curl -X POST http://localhost:8080/api/permisos-perfil \
+      -H "Authorization: Bearer <token>" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "idModulo": 4,
+        "idPerfil": 3,
+        "bitAgregar": false,
+        "bitEditar": false,
+        "bitConsulta": true,
+        "bitEliminar": false,
+        "bitDetalle": true
+      }'
+    ```
+
+    ```json
+    { "id": 7 }
+    ```
+
+    Repeat this call for each module the profile requires, adjusting the permission bits accordingly.
+  </Step>
+
+  <Step title="Assign the profile to a user">
+    When creating or updating a user, set `idPerfil` to the profile's ID. The next time that user logs in, their `LoginResponse.permisos` will reflect the permissions you just configured.
+  </Step>
+</Steps>
+
+## Managing existing permission records
+
+All `/api/permisos-perfil` endpoints require a valid Bearer token.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/permisos-perfil?page=1` | List permission records, 5 per page. |
+| `GET` | `/api/permisos-perfil/{id}` | Retrieve a single record by ID. |
+| `POST` | `/api/permisos-perfil` | Create a new permission record. |
+| `PUT` | `/api/permisos-perfil/{id}` | Replace all fields on an existing record. |
+| `DELETE` | `/api/permisos-perfil/{id}` | Remove a permission record. |
+
+To update an existing permission — for example to add edit rights — use `PUT` with the full `PermisosPerfil` body:
+
+```bash
+curl -X PUT http://localhost:8080/api/permisos-perfil/7 \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "idModulo": 4,
+    "idPerfil": 3,
+    "bitAgregar": false,
+    "bitEditar": true,
+    "bitConsulta": true,
+    "bitEliminar": false,
+    "bitDetalle": true
+  }'
+```
+
+```json
+{ "message": "Permisos actualizados" }
+```

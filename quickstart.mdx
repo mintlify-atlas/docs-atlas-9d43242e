@@ -1,80 +1,174 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick start"
+description: "Get Seguridad App running locally and make your first authenticated API call."
 ---
 
-## Get started in three steps
+<Steps>
+  <Step title="Prerequisites">
+    Make sure you have the following installed before you begin:
 
-Get your documentation site running locally and make your first customization.
+    - **JDK 21** — the project targets JVM 21. Verify with `java -version`.
+    - **Gradle** — or use the included `./gradlew` wrapper (no separate install needed).
+    - **PostgreSQL** — a running instance on port `5432`, or Docker to run one alongside the app.
 
-### Step 1: Set up your local environment
+    To start a PostgreSQL instance with Docker:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash
+    docker run -d \
+      --name seguridad-pg \
+      -e POSTGRES_USER=postgres \
+      -e POSTGRES_PASSWORD=postgres \
+      -e POSTGRES_DB=seguridad_db \
+      -p 5432:5432 \
+      postgres:16
+    ```
+  </Step>
 
-### Step 2: Deploy your changes
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/VictorGHOSTH/seguridad-app.git
+    cd seguridad-app
+    ```
+  </Step>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+  <Step title="Set environment variables">
+    The application reads three environment variables at startup. All have built-in defaults, but you should override them before going to production.
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    | Variable | Default | Description |
+    |---|---|---|
+    | `DATABASE_URL` | `jdbc:postgresql://localhost:5432/seguridad_db` | Full JDBC connection URL for the PostgreSQL database |
+    | `DATABASE_USER` | `postgres` | Database username |
+    | `DATABASE_PASSWORD` | `postgres` | Database password |
+    | `JWT_SECRET` | `my-secret-key-for-jwt-authentication-2024-seguridad-app` | HMAC-256 signing key for JWT tokens |
+    | `RECAPTCHA_SECRET` | `6Lcj3ossAAAAAAFK0hIW8FrgfTQfeivriiYQUUEq` | Google reCAPTCHA v2 server-side secret key |
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    Export them in your shell for the current session:
 
-### Step 3: Go live
+    ```bash
+    export DATABASE_URL="jdbc:postgresql://localhost:5432/seguridad_db"
+    export DATABASE_USER="postgres"
+    export DATABASE_PASSWORD="postgres"
+    export JWT_SECRET="replace-with-a-long-random-secret"
+    export RECAPTCHA_SECRET="your-recaptcha-secret-key"
+    ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    <Warning>
+      Never use the default `JWT_SECRET` in production. It is public knowledge. Generate a strong random value — at least 32 characters — before deploying.
+    </Warning>
+  </Step>
+
+  <Step title="Run the server">
+    <CodeGroup>
+
+    ```bash Gradle
+    ./gradlew run
+    ```
+
+    ```bash Docker
+    ./gradlew buildFatJar
+    docker build -t seguridad-app .
+    docker run -p 8080:8080 \
+      -e DATABASE_URL="jdbc:postgresql://host.docker.internal:5432/seguridad_db" \
+      -e DATABASE_USER="postgres" \
+      -e DATABASE_PASSWORD="postgres" \
+      -e JWT_SECRET="replace-with-a-long-random-secret" \
+      -e RECAPTCHA_SECRET="your-recaptcha-secret-key" \
+      seguridad-app
+    ```
+
+    </CodeGroup>
+
+    When the server starts successfully you will see:
+
+    ```
+    2024-12-04 14:32:45.584 [main] INFO  Application - Application started in 0.303 seconds.
+    2024-12-04 14:32:45.682 [main] INFO  Application - Responding at http://0.0.0.0:8080
+    ```
+
+    On first start the server creates all database tables and seeds initial data: two profiles (`Administrador` and `Usuario Normal`), the `admin` user, eight modules, and three menus.
+  </Step>
+
+  <Step title="Make your first login call">
+    Send a `POST /api/auth/login` request with your credentials and a reCAPTCHA token.
+
+    ```bash
+    curl -s -X POST http://localhost:8080/api/auth/login \
+      -H "Content-Type: application/json" \
+      -d '{
+        "username": "admin",
+        "password": "Admin123",
+        "recaptchaToken": "<your-recaptcha-token>"
+      }'
+    ```
+
+    A successful response returns a JWT and the user's full permission set:
+
+    ```json
+    {
+      "token": "eyJhbGciOiJIUzI1NiJ9...",
+      "usuario": {
+        "id": 1,
+        "strNombreUsuario": "admin",
+        "strCorreo": "admin@seguridad.com",
+        "idPerfil": 1,
+        "idEstadoUsuario": 1
+      },
+      "esAdministrador": true,
+      "permisos": [
+        {
+          "idModulo": 1,
+          "strNombreModulo": "Perfil",
+          "bitAgregar": true,
+          "bitEditar": true,
+          "bitConsulta": true,
+          "bitEliminar": true,
+          "bitDetalle": true
+        }
+      ]
+    }
+    ```
+
+    Store the `token` value — you need it for every subsequent request.
+
+    <Note>
+      reCAPTCHA validation is enforced on every login. For local development you can use a test token from Google's reCAPTCHA testing keys, or temporarily swap the secret key for a test key pair that always succeeds.
+    </Note>
+  </Step>
+
+  <Step title="Call a protected endpoint">
+    Pass the token as a `Bearer` value in the `Authorization` header:
+
+    ```bash
+    curl -s http://localhost:8080/api/auth/verify \
+      -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+    ```
+
+    The token verification endpoint returns:
+
+    ```json
+    {
+      "valid": true,
+      "userId": 1
+    }
+    ```
+
+    Use the same `Authorization: Bearer <token>` header on all resource endpoints — users, profiles, modules, permissions, and menus.
+  </Step>
+</Steps>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Authentication concepts" icon="lock" href="/concepts/authentication">
+    Learn how JWT tokens are structured, validated, and how the 24-hour expiry works.
+  </Card>
+  <Card title="Roles and permissions" icon="shield-halved" href="/concepts/roles-permissions">
+    Understand how profiles control access and how to assign per-module permissions.
+  </Card>
+  <Card title="Deployment" icon="server" href="/deployment">
+    Deploy to production using the multi-stage Docker build.
+  </Card>
+  <Card title="API reference" icon="code" href="/api/auth/login">
+    Full reference for every endpoint — request shapes, response fields, and error codes.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

@@ -1,0 +1,202 @@
+---
+title: "Users"
+description: "Create and manage user accounts. All endpoints require a valid Bearer token."
+---
+
+The Users API lets you list, create, update, and delete user accounts, as well as upload profile photos. All endpoints require authentication.
+
+**Base path:** `/api/usuarios`  
+**Auth required:** Yes — `Authorization: Bearer <token>`
+
+---
+
+## List users
+
+`GET /api/usuarios`
+
+Returns a paginated list of users.
+
+### Query parameters
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed). Defaults to `1`. Each page returns up to 5 records.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "strNombreUsuario": "admin",
+      "idPerfil": 1,
+      "idEstadoUsuario": 1,
+      "strCorreo": "admin@seguridad.com",
+      "strNumeroCelular": "1234567890",
+      "strFotoPerfil": null
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 5
+}
+```
+
+<ResponseField name="data" type="array">
+  Array of user objects for the requested page.
+</ResponseField>
+<ResponseField name="total" type="integer">
+  Total number of users across all pages.
+</ResponseField>
+<ResponseField name="page" type="integer">
+  Current page number.
+</ResponseField>
+<ResponseField name="pageSize" type="integer">
+  Number of records per page (fixed at 5).
+</ResponseField>
+
+---
+
+## Get a user
+
+`GET /api/usuarios/{id}`
+
+<ParamField path="id" type="integer" required>
+  The user's ID.
+</ParamField>
+
+Returns the user object or `404` if not found.
+
+```json
+{
+  "id": 1,
+  "strNombreUsuario": "admin",
+  "idPerfil": 1,
+  "idEstadoUsuario": 1,
+  "strCorreo": "admin@seguridad.com",
+  "strNumeroCelular": "1234567890",
+  "strFotoPerfil": null
+}
+```
+
+---
+
+## Create a user
+
+`POST /api/usuarios`
+
+### Body parameters
+
+<ParamField body="strNombreUsuario" type="string" required>
+  Login username. Must be unique.
+</ParamField>
+<ParamField body="password" type="string" required>
+  Plain-text password. The server hashes it with bcrypt (cost 12) before storage.
+</ParamField>
+<ParamField body="idPerfil" type="integer" required>
+  ID of the profile (role) to assign to this user.
+</ParamField>
+<ParamField body="idEstadoUsuario" type="integer" required>
+  User status ID (e.g., `1` = active).
+</ParamField>
+<ParamField body="strCorreo" type="string" required>
+  Email address.
+</ParamField>
+<ParamField body="strNumeroCelular" type="string" required>
+  Mobile phone number.
+</ParamField>
+
+### Response — 201 Created
+
+```json
+{ "id": 42 }
+```
+
+### Example
+
+```bash
+curl --request POST \
+  --url https://your-host/api/usuarios \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "strNombreUsuario": "jdoe",
+    "password": "S3cureP@ss!",
+    "idPerfil": 2,
+    "idEstadoUsuario": 1,
+    "strCorreo": "jdoe@example.com",
+    "strNumeroCelular": "5551234567"
+  }'
+```
+
+---
+
+## Update a user
+
+`PUT /api/usuarios/{id}`
+
+Replaces user fields. Pass the full `Usuario` object (excluding password — use a separate flow to change passwords).
+
+<ParamField path="id" type="integer" required>
+  The user's ID.
+</ParamField>
+
+Returns `{"message": "Usuario actualizado"}` on success, `404` if not found.
+
+---
+
+## Delete a user
+
+`DELETE /api/usuarios/{id}`
+
+<ParamField path="id" type="integer" required>
+  The user's ID.
+</ParamField>
+
+Returns `{"message": "Usuario eliminado"}` on success, `404` if not found.
+
+---
+
+## Upload profile photo
+
+`POST /api/usuarios/{id}/foto`
+
+Upload an image file as the user's profile photo. Accepts `multipart/form-data`.
+
+<ParamField path="id" type="integer" required>
+  The user's ID.
+</ParamField>
+
+The file part is expected as a `FileItem` in the multipart body. The server saves the file under `static/uploads/` and stores the path on the user record.
+
+### Response — 200 OK
+
+```json
+{ "fotoPath": "/uploads/550e8400-e29b-photo.jpg" }
+```
+
+### Example
+
+```bash
+curl --request POST \
+  --url https://your-host/api/usuarios/1/foto \
+  --header 'Authorization: Bearer <token>' \
+  --form 'foto=@/path/to/photo.jpg'
+```
+
+<Note>
+  Uploaded files are stored on the local filesystem. In a containerized deployment, mount a persistent volume at the uploads path so photos survive container restarts.
+</Note>
+
+---
+
+## Error responses
+
+| Status | Body | Reason |
+|--------|------|--------|
+| `400 Bad Request` | `{"error": "ID inválido"}` | Path parameter is not a valid integer. |
+| `400 Bad Request` | `{"error": "Error al procesar la solicitud: ..."}` | Request body could not be deserialized. |
+| `401 Unauthorized` | — | Missing or invalid Bearer token. |
+| `404 Not Found` | `{"error": "Usuario no encontrado"}` | No user with the given ID exists. |
+| `500 Internal Server Error` | `{"error": "Error al crear usuario"}` | Database error during creation. |

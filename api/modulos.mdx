@@ -1,0 +1,149 @@
+---
+title: "Modules"
+description: "Manage application modules. All endpoints require a valid Bearer token."
+---
+
+Modules represent named feature areas in your application. Permissions are granted per module, and modules are grouped under menus for navigation. The server seeds 8 default modules on first start.
+
+**Base path:** `/api/modulos`  
+**Auth required:** Yes — `Authorization: Bearer <token>`
+
+---
+
+## List modules (paginated)
+
+`GET /api/modulos`
+
+Returns a paginated list of modules.
+
+### Query parameters
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed). Defaults to `1`. Each page returns up to 5 records.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{
+  "data": [
+    { "id": 1, "strNombreModulo": "Perfil" },
+    { "id": 2, "strNombreModulo": "Módulo" }
+  ],
+  "total": 8,
+  "page": 1,
+  "pageSize": 5
+}
+```
+
+---
+
+## List all modules (unpaginated)
+
+`GET /api/modulos/all`
+
+Returns all modules as a flat array. Useful for populating dropdowns when assigning permissions.
+
+### Response — 200 OK
+
+```json
+[
+  { "id": 1, "strNombreModulo": "Perfil" },
+  { "id": 2, "strNombreModulo": "Módulo" },
+  { "id": 3, "strNombreModulo": "Permisos-Perfil" },
+  { "id": 4, "strNombreModulo": "Usuario" },
+  { "id": 5, "strNombreModulo": "Principal 1.1" },
+  { "id": 6, "strNombreModulo": "Principal 1.2" },
+  { "id": 7, "strNombreModulo": "Principal 2.1" },
+  { "id": 8, "strNombreModulo": "Principal 2.2" }
+]
+```
+
+<Tip>
+  Use `GET /api/modulos/all` when building a permissions assignment UI — it gives you all module IDs and names in one request without pagination.
+</Tip>
+
+---
+
+## Get a module
+
+`GET /api/modulos/{id}`
+
+<ParamField path="id" type="integer" required>
+  The module's ID.
+</ParamField>
+
+Returns the module object or `404` if not found.
+
+```json
+{ "id": 1, "strNombreModulo": "Perfil" }
+```
+
+---
+
+## Create a module
+
+`POST /api/modulos`
+
+### Body parameters
+
+<ParamField body="strNombreModulo" type="string" required>
+  Name of the module (e.g., `"Reports"`, `"Invoices"`).
+</ParamField>
+
+### Response — 201 Created
+
+```json
+{ "id": 9 }
+```
+
+### Example
+
+```bash
+curl --request POST \
+  --url https://your-host/api/modulos \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{"strNombreModulo": "Reports"}'
+```
+
+After creating a module, link it to a menu via the [Menus API](/api/menus) and grant permissions to profiles via the [Permissions API](/api/permisos-perfil).
+
+---
+
+## Update a module
+
+`PUT /api/modulos/{id}`
+
+<ParamField path="id" type="integer" required>
+  The module's ID.
+</ParamField>
+
+Pass the full module object. Returns `{"message": "Módulo actualizado"}` on success.
+
+---
+
+## Delete a module
+
+`DELETE /api/modulos/{id}`
+
+<ParamField path="id" type="integer" required>
+  The module's ID.
+</ParamField>
+
+Returns `{"message": "Módulo eliminado"}` on success, `404` if not found.
+
+<Warning>
+  Deleting a module will orphan any `PermisosPerfil` records referencing it. Remove those permissions records first.
+</Warning>
+
+---
+
+## Error responses
+
+| Status | Body | Reason |
+|--------|------|--------|
+| `400 Bad Request` | `{"error": "ID inválido"}` | Path parameter is not a valid integer. |
+| `401 Unauthorized` | — | Missing or invalid Bearer token. |
+| `404 Not Found` | `{"error": "Módulo no encontrado"}` | No module with the given ID exists. |
+| `500 Internal Server Error` | `{"error": "Error al crear módulo"}` | Database error during creation. |
